@@ -20,10 +20,3 @@ modRV <- function(X, Y){
 }
 
 
-X1  <- matrix(rnorm(100*300),100,300)
-usv <- svd(X1)
-X2  <- usv$u[,-3] %*% diag(usv$d[-3]) %*% t(usv$v[,-3])
-
-
-RV2(X1,X2)
-modRV(X1,X2)
