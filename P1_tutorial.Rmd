@@ -1,0 +1,98 @@
+---
+title: "Partitioning subjects based on high-dimensional fMRI data"
+author: "Jeffrey Durieux, MSc"
+date: "6/26/2019"
+output: pdf_document
+---
+
+## Introduction
+
+This document contains a brief tutorial on how apply the two-step procedure in \texttt{R}. For more information about this procedure please read my paper: <https://lnkd.in/gmRyK-5>
+
+## Download an example dataset and load it into R
+
+First download an example dataset via this link: <https://surfdrive.surf.nl/files/index.php/s/j0RGzTWwYo2l6GS>
+This dataset is stored as a .Rdata object and it contains a large list with 60 elements (+/- 46 Mb).
+Each element is a matrix with 1000 rows and 100 columns. This is a very common way for me to store three-way data in R. (Note that in R it is also entirely possible to store three-way data in an array)
+
+
+```{r, echo=TRUE, eval=TRUE}
+load("~/Downloads/ExampleData.Rdata") # object is named Xe
+# size of the list 
+length(Xe)
+
+# show first two objects of the list
+str(Xe, list.len = 2)
+
+# names of list
+names(Xe)
+
+```
+
+
+## Source some functions from my GitHub page
+
+```{r, echo=TRUE, eval=TRUE}
+suppressPackageStartupMessages(library(RCurl))
+
+s1 <- getURL("https://raw.githubusercontent.com/jeffreydurieux/Tutorials/master/modRV.R", 
+                  ssl.verifypeer = FALSE)
+s2 <- getURL("https://raw.githubusercontent.com/jeffreydurieux/Tutorials/master/computeRVmat.R",
+                  ssl.verifypeer = FALSE)
+
+eval(parse(text = s1))
+eval(parse(text = s2))
+rm(s1, s2)
+```
+
+
+## Step 1: apply a data reduction to the example dataset
+
+In the first step, ICA's are performed on each element of your list (the example dataset) and we store the estimated component matrices $S$ in a list object named \texttt{ICAList}.
+Note that for this example we select for 20 components, since this is the true underlying components of the example dataset. In practice, it is recommended to apply a model selection procedure to the data in order to choose the optimal number of components present in each dataset.
+
+```{r, echo=TRUE, eval=TRUE}
+library(ica)
+
+ICAlist <- lapply(X = Xe, FUN = icafast, nc = 20)
+ICAlist <- lapply(X = ICAlist, function(anom) anom$S)
+
+```
+
+
+## Step 2: Calculate all pairwise modified RV coefficients
+
+Use the two functions sourced from my GitHub page to compute all modified RV coefficients between all subject pairs. Depending on the argument settings, the fuction returns a \texttt{dist} object or a similarity matrix. Also note that when the argument \texttt{verbose == TRUE} a progressbar is added to the console so that you can monitor the computation time. 
+
+```{r, echo=TRUE, eval=TRUE}
+RVmat <- computeRVmat(DataList = ICAlist, dist = TRUE, verbose = TRUE)
+```
+
+
+## Apply a clustering procedure
+
+After computing the modified RV matrix, you can apply a clustering procedure to this matrix. In this example we use hierarchical clustering with Ward's method. In order to see whether the clustering result is estimated correctly you can compare the colour of the branches with the symbols on the leaf nodes. The symbols represent the true clustering and the colour of the branches represent the estimated clustering.
+
+```{r, echo=TRUE, eval=TRUE}
+suppressPackageStartupMessages(library(dendextend))
+
+res <- hclust(RVmat, method = 'ward.D2')
+res <- as.dendrogram(res)
+
+nameres <- names( cutree(res, k = 4, order_clusters_as_data = F))
+nn <- rep(NA, 60)
+nn[nameres %in% paste(1:5)] <- 0
+nn[nameres %in% paste(6:15)] <- 1
+nn[nameres %in% paste(16:35)] <- 2
+nn[nameres %in% paste(36:60)] <- 5
+
+res %>% set("branches_k_color", k = 4) %>% 
+  set("leaves_pch", nn) %>%
+  plot(main = 'Cluster results')
+```
+
+## Final notes
+
+Note that this tutorial document assumed that you installed the \texttt{RCurl}, \texttt{ica} and \texttt{dendextend} R packages. Moreover, the ICA and modified RV computations are done in a sequential manner. However both can be done in parallel on a computer cluster if necessary; applying single subject ICA to each matrix can be done in parallel and all modified-RV coefficients between all subject pairs (total of $\frac{N(N-1)}{2}$) can also be computed in parallel. (Both are [embarrassingly parallel](https://en.wikipedia.org/wiki/Embarrassingly_parallel) computing problems).
+
+Hope you liked this very short tutorial and if you have any question or suggestions please contact me via: j.durieux@fsw.leidenuniv.nl
